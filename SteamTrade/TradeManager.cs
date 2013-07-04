@@ -9,7 +9,7 @@ namespace SteamTrade
     public class TradeManager
     {
         const int MaxGapTimeDefault = 15;
-        const int MaxTradeTimeDefault = 180;
+        const int MaxTradeTimeDefault = 300;
         const int TradePollingIntervalDefault = 800;
         string apiKey;
         string sessionId;
@@ -330,7 +330,7 @@ namespace SteamTrade
                 // stop thread
                 IsTradeThreadRunning = false;
 
-                DebugPrint ("timed out...");
+                DebugPrint ("Timed out.");
 
                 if (OnTimeout != null)
                 {
@@ -341,7 +341,7 @@ namespace SteamTrade
             }
             else if (untilActionTimeout <= 20 && untilActionTimeout % 10 == 0)
             {
-                trade.SendMessage ("Are You AFK? The trade will be canceled in " + untilActionTimeout + " seconds if you don't do something.");
+                trade.SendMessage ("The trade will be timed out in " + untilActionTimeout + " seconds.");
             }
         }
 

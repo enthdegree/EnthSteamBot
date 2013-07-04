@@ -1,14 +1,23 @@
 using SteamKit2;
 using System.Collections.Generic;
 using SteamTrade;
+using SteamBot;
+using System;
 
 namespace SteamBot
 {
     public class SimpleUserHandler : UserHandler
     {
-        public int ScrapPutUp;
+        public double valueCustomerOffered = 0;
+        public double valueBotOffered = 0;
+        public List<ulong> itemsOffered = new List<ulong>();
+        Backpack botBackpack;
+        bool bItemAddingMode = false;
 
-        public SimpleUserHandler (Bot bot, SteamID sid) : base(bot, sid) {}
+        public SimpleUserHandler (Bot bot, SteamID sid) : base(bot, sid) 
+        {
+            botBackpack = new Backpack();
+        }
 
         public override bool OnFriendAdd () 
         {
@@ -17,9 +26,10 @@ namespace SteamBot
         
         public override void OnFriendRemove () {}
         
-        public override void OnMessage (string message, EChatEntryType type) 
+        public override void OnMessage (string message, EChatEntryType type)
         {
             Bot.SteamFriends.SendChatMessage(OtherSID, type, Bot.ChatResponse);
+            Bot.SteamFriends.SendChatMessage(OtherSID, type, "Send a trade request and this bot will accept if it is not busy with another user!");
         }
 
         public override bool OnTradeRequest() 
@@ -31,42 +41,160 @@ namespace SteamBot
         {
             Bot.SteamFriends.SendChatMessage (OtherSID, 
                                               EChatEntryType.ChatMsg,
-                                              "Oh, there was an error: " + error + "."
-                                              );
+                                              "Error: " + error + "." );
             Bot.log.Warn (error);
         }
         
         public override void OnTradeTimeout () 
         {
             Bot.SteamFriends.SendChatMessage (OtherSID, EChatEntryType.ChatMsg,
-                                              "Sorry, but you were AFK and the trade was canceled.");
-            Bot.log.Info ("User was kicked because he was AFK.");
+                                              "User timed out.");
+            Bot.log.Info ("User kicked due to timeout.");
         }
         
-        public override void OnTradeInit() 
+        public override void OnTradeInit()
         {
-            Trade.SendMessage ("Success. Please put up your items.");
+            Trade.SendMessage("Welcome to AUTOMATED SHOTGUN TRADER alpha");
+            Trade.SendMessage(mainMenu());
         }
         
-        public override void OnTradeAddItem (Schema.Item schemaItem, Inventory.Item inventoryItem) {}
-        
-        public override void OnTradeRemoveItem (Schema.Item schemaItem, Inventory.Item inventoryItem) {}
-        
-        public override void OnTradeMessage (string message) {}
-        
-        public override void OnTradeReady (bool ready) 
+        public override void OnTradeAddItem(Schema.Item schemaItem, Inventory.Item inventoryItem) 
         {
-            if (!ready)
+            int nItemID = botBackpack.getItemID( schemaItem.Defindex, schemaItem.ItemQuality );
+
+            Trade.SendMessage("You added an item.");
+
+            if (nItemID != -256)
             {
-                Trade.SetReady (false);
+                double itemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID);
+                if (itemValue < 0)
+                {
+                    Trade.SendMessage("Items of this type are overstocked. \n" +
+                                      "Value in your current offer: " + (valueCustomerOffered / 3) / 3 + " ref");
+                    return;
+                }
+                else
+                {
+                    valueCustomerOffered += itemValue;
+                    Trade.SendMessage("Value in your current offer: " + (valueCustomerOffered / 3) / 3 + " ref");
+                    return;
+                }
             }
             else
             {
-                if(Validate ())
+                Trade.SendMessage("The item you just added is not in our trade database. \n" +
+                                  "Value in your current offer: " + (valueCustomerOffered / 3) / 3 + " ref");
+            }
+        }
+        
+        public override void OnTradeRemoveItem(Schema.Item schemaItem, Inventory.Item inventoryItem) 
+        {
+            int nItemID = botBackpack.getItemID(schemaItem.Defindex, schemaItem.ItemQuality);
+            double nItemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID);
+
+            // Check to see if the item they removed was overstocked. 
+            // We don't want to subtract (-1) from their offer's value for their removing an item.
+            if( nItemValue >= 0)
+            {
+                valueCustomerOffered -= nItemValue;
+            }
+
+            Trade.SendMessage("You removed an item. \n" +
+                              "Value in your current offer: " + (valueCustomerOffered/3)/3 + " ref");
+        }
+        
+        public override void OnTradeMessage (string message) {
+            if (bItemAddingMode)
+            {
+                try
                 {
-                    Trade.SetReady (true);
+                    int nIdToAdd = Convert.ToInt32(message);
+                    int[] itemToAddAttribs = botBackpack.getItemAttribs(nIdToAdd);
+
+                    if (botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd) < 0)
+                    {
+                        Trade.SendMessage("Item not in stock.");
+                        Trade.SendMessage(itemCatalog());
+                    }
+                    else
+                    {
+                        List<Inventory.Item> itemsInBackpack = botBackpack.getBackpack("76561198070842975");
+                        foreach (Inventory.Item i in itemsInBackpack)
+                        {
+                            if (i.Defindex == itemToAddAttribs[0])
+                            {
+                                if ( (i.Quality == itemToAddAttribs[1].ToString() || itemToAddAttribs[1] == -1)
+                                        && !(itemsOffered.Contains(i.Id)) )
+                                {
+                                    Trade.AddItem(i.Id);
+                                    itemsOffered.Add(i.Id);
+                                    valueBotOffered += botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd);
+                                    Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 3) / 3 + " ref" +
+                                                       mainMenu());
+                                    bItemAddingMode = false;
+                                    return;
+                                }
+                            }
+                        }
+                    }
                 }
-                Trade.SendMessage ("Scrap: " + ScrapPutUp);
+                catch (Exception e)
+                {
+                    Console.WriteLine(e.ToString());
+
+                    if ("X" == message.ToUpper())
+                    {
+                        bItemAddingMode = false;
+                        Trade.SendMessage(mainMenu());
+                    }
+                    else
+                    {
+                        Trade.SendMessage("Response could not be parsed.\n--\n" + mainMenu());
+                    }
+                }
+            }
+
+            // Main menu
+            else
+            {
+                switch (message)
+                {
+                    case "1":
+                        bItemAddingMode = true;
+                        Trade.SendMessage(itemCatalog() +
+                                          "\n [X]: Cancel");
+                        break;
+
+                    case "2":
+                        foreach (ulong id in itemsOffered)
+                        {
+                            Trade.RemoveItem(id);
+                        }
+                        Trade.SendMessage(mainMenu());
+                        break;
+
+                    default:
+                        bItemAddingMode = false;
+                        Trade.SendMessage("Response could not be parsed. \n--\n" + mainMenu());
+                        break;
+                }
+            }
+        }
+        
+        public override void OnTradeReady(bool ready) 
+        {
+            Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 3) / 3 + " ref" +
+                              "Value you are offering: " + (valueCustomerOffered / 3) / 3 );
+            if (!ready)
+            {
+                Trade.SetReady(false);
+            }
+            else
+            {
+                if(Validate())
+                {
+                    Trade.SetReady(true);
+                }
             }
         }
         
@@ -78,55 +206,47 @@ namespace SteamBot
 
                 if (success)
                 {
-                    Log.Success ("Trade was Successful!");
+                    Log.Success("Trade successful!");
                 }
                 else
                 {
-                    Log.Warn ("Trade might have failed.");
+                    Log.Warn("Trade may have failed.");
                 }
             }
 
-            OnTradeClose ();
+            OnTradeClose();
         }
 
-        public bool Validate ()
-        {            
-            ScrapPutUp = 0;
-            
-            List<string> errors = new List<string> ();
-            
-            foreach (ulong id in Trade.OtherOfferedItems)
+        public bool Validate()
+        {
+            if (valueCustomerOffered < valueBotOffered)
             {
-                var item = Trade.OtherInventory.GetItem (id);
-                if (item.Defindex == 5000)
-                    ScrapPutUp++;
-                else if (item.Defindex == 5001)
-                    ScrapPutUp += 3;
-                else if (item.Defindex == 5002)
-                    ScrapPutUp += 9;
-                else
-                {
-                    var schemaItem = Trade.CurrentSchema.GetItem (item.Defindex);
-                    errors.Add ("Item " + schemaItem.Name + " is not a metal.");
-                }
+                return false;
             }
-            
-            if (ScrapPutUp < 1)
+            else
             {
-                errors.Add ("You must put up at least 1 scrap.");
+                return true;
             }
-            
-            // send the errors
-            if (errors.Count != 0)
-                Trade.SendMessage("There were errors in your trade: ");
-            foreach (string error in errors)
-            {
-                Trade.SendMessage(error);
-            }
-            
-            return errors.Count == 0;
         }
-        
+
+        public string itemCatalog()
+        {
+            string s = "";
+            List<string[]> nameList = botBackpack.getItemNameList();
+            foreach (string[] nameAndIndex in nameList)
+            {
+                s += "[" + nameAndIndex[0] + "]: " + nameAndIndex[1];
+                s += "\n";
+            }
+            return s;
+        }
+
+        public string mainMenu()
+        {
+            return "Enter a number to make a selection: \n" +
+                   "[1]: Add items to buy \n" +
+                   "[2]: Clear my offers";
+        }
     }
  
 }
