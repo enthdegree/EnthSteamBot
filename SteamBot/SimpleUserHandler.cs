@@ -11,8 +11,13 @@ namespace SteamBot
         public double valueCustomerOffered = 0;
         public double valueBotOffered = 0;
         public List<ulong> itemsOffered = new List<ulong>();
+
         Backpack botBackpack;
+        List<Inventory.Item> listOfBackpackItems;
+
         bool bItemAddingMode = false;
+        bool bCatalogIsUpToDate = false;
+        string szItemCatalog = "";
 
         public SimpleUserHandler (Bot bot, SteamID sid) : base(bot, sid) 
         {
@@ -34,6 +39,7 @@ namespace SteamBot
 
         public override bool OnTradeRequest() 
         {
+
             return true;
         }
         
@@ -54,18 +60,32 @@ namespace SteamBot
         
         public override void OnTradeInit()
         {
+
+            valueCustomerOffered = 0;
+            valueBotOffered = 0;
+            itemsOffered.Clear();
+            listOfBackpackItems = botBackpack.getBackpack("76561198070842975");
+
+            bItemAddingMode = false;
+            bCatalogIsUpToDate = false;
+            szItemCatalog = "";
+
             Trade.SendMessage("Welcome to AUTOMATED SHOTGUN TRADER alpha \n" + mainMenu());
         }
         
-        public override void OnTradeAddItem(Schema.Item schemaItem, Inventory.Item inventoryItem) 
+        public override void OnTradeAddItem(Schema.Item schemaItem, Inventory.Item inventoryItem)
         {
-            int nItemID = botBackpack.getItemID( schemaItem.Defindex, schemaItem.ItemQuality );
-
             string s = "You added an item. ";
 
-            if (nItemID != -256)
+            int nItemID = botBackpack.getItemID(inventoryItem.Defindex, Convert.ToInt32(inventoryItem.Quality));
+            
+            if (inventoryItem.CustomName != null || inventoryItem.CustomDescription != null)
             {
-                double itemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID);
+                s += "The item you added is not clean. \n This bot cannot currently assess the price of unclean items.";
+            }
+            else if (nItemID != -256)
+            {
+                double itemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID, listOfBackpackItems);
                 if (itemValue < 0)
                 {
                     s += "Items of this type are overstocked. \n" +
@@ -83,16 +103,16 @@ namespace SteamBot
                      "Value in your current offer: " + valueCustomerOffered/9 + " ref";
             }
             
-                Trade.SendMessage(s);
+            Trade.SendMessage(s);
         }
         
         public override void OnTradeRemoveItem(Schema.Item schemaItem, Inventory.Item inventoryItem) 
         {
-            int nItemID = botBackpack.getItemID(schemaItem.Defindex, schemaItem.ItemQuality);
-            double nItemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID);
+            int nItemID = botBackpack.getItemID(inventoryItem.Defindex, Convert.ToInt32(inventoryItem.Quality));
+            double nItemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID, listOfBackpackItems);
 
-            // Check to see if the item they removed was overstocked. 
-            // We don't want to subtract (-1) from their offer's value for their removing an item.
+            // Check to see if the item they removed was one that we wanted.
+            // (Otherwise we end up subtracting (-1) from their offer value)
             if( nItemValue >= 0)
             {
                 valueCustomerOffered -= nItemValue;
@@ -108,27 +128,27 @@ namespace SteamBot
                 try
                 {
                     int nIdToAdd = Convert.ToInt32(message);
-                    int[] itemToAddAttribs = botBackpack.getItemAttribs(nIdToAdd);
+                    ItemType itemToAddAttribs = botBackpack.getItemAttribs(nIdToAdd);
 
                     // If a trade should not be made due to the selling cutoff being exceeded, computeItemSellingPrice() will return -1.
                     // If this happens, just report that the item is out of stock.
-                    if (botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd) < 0)
+                    if (botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd, listOfBackpackItems) < 0)
                     {
                         Trade.SendMessage("Item out of stock. \n--\n" + itemCatalog());
                     }
                     else
                     {
-                        List<Inventory.Item> itemsInBackpack = botBackpack.getBackpack("76561198070842975");
-                        foreach (Inventory.Item i in itemsInBackpack)
+                        foreach (Inventory.Item i in listOfBackpackItems)
                         {
-                            if (i.Defindex == itemToAddAttribs[0])
+                            if (i.Defindex == itemToAddAttribs.nDefIndex)
                             {
-                                if ( (i.Quality == itemToAddAttribs[1].ToString() || itemToAddAttribs[1] == -1)
+                                if ( (i.Quality == itemToAddAttribs.nQuality.ToString() || itemToAddAttribs.nDefIndex == -1)
                                         && !(itemsOffered.Contains(i.Id)) )
                                 {
                                     Trade.AddItem(i.Id);
                                     itemsOffered.Add(i.Id);
-                                    valueBotOffered += botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd);
+                                    valueBotOffered += botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd, listOfBackpackItems);
+                                    listOfBackpackItems.Remove(i);
                                     Trade.SendMessage("Value bot is offering: " + valueBotOffered/9 + " ref \n--\n" +
                                                        mainMenu());
                                     bItemAddingMode = false;
@@ -174,6 +194,8 @@ namespace SteamBot
                         {
                             Trade.RemoveItem(id);
                         }
+                        itemsOffered.Clear();
+                        listOfBackpackItems = botBackpack.getBackpack("76561198070842975");
                         valueBotOffered = 0;
                         Trade.SendMessage(mainMenu());
                         break;
@@ -213,10 +235,12 @@ namespace SteamBot
                 if (success)
                 {
                     Log.Success("Trade successful!");
+                    bCatalogIsUpToDate = false;
                 }
                 else
                 {
                     Log.Warn("Trade may have failed.");
+                    bCatalogIsUpToDate = false;
                 }
             }
 
@@ -225,7 +249,7 @@ namespace SteamBot
 
         public bool Validate()
         {
-            if (valueCustomerOffered < valueBotOffered)
+            if ((valueBotOffered-valueCustomerOffered)/9 > 0.01)
             {
                 bItemAddingMode = false;
                 Trade.SendMessage("I can't accept this. Please add " + (valueBotOffered - valueCustomerOffered) / 9 + " more ref or ask for less items" +
@@ -240,14 +264,25 @@ namespace SteamBot
 
         public string itemCatalog()
         {
-            string s = "";
-            List<string[]> nameList = botBackpack.getItemNameList();
-            foreach (string[] nameAndIndex in nameList)
+            if (!bCatalogIsUpToDate)
             {
-                s += "[" + nameAndIndex[0] + "]: " + nameAndIndex[1];
-                s += "\n";
+                szItemCatalog = "";
+                List<ItemType> itemTypeList = botBackpack.getItemTypeList();
+                foreach (ItemType t in itemTypeList)
+                {
+                    foreach(Inventory.Item i in listOfBackpackItems)
+                    {
+                        if( i.Defindex == t.nDefIndex && i.Quality == t.nQuality.ToString() )
+                        {
+                            szItemCatalog += "[" + t.nTableIndex + "]: " + t.szName;
+                            szItemCatalog += "\n";
+                            break;
+                        }
+                    }
+                }
+                bCatalogIsUpToDate = true;
             }
-            return s;
+            return szItemCatalog;
         }
 
         public string mainMenu()
@@ -256,7 +291,21 @@ namespace SteamBot
                    "[1]: Add items to buy \n" +
                    "[2]: Clear my offers";
         }
+
+        public override void OnTradeClose()
+        {
+            valueCustomerOffered = 0;
+            valueBotOffered = 0;
+            itemsOffered.Clear();
+            listOfBackpackItems.Clear();
+
+            bItemAddingMode = false;
+            bCatalogIsUpToDate = false;
+            szItemCatalog = "";
+        }
+
     }
- 
+
 }
+
 

@@ -10,12 +10,18 @@ namespace SteamBot
 {
     public class ItemType
     {
+        public int nTableIndex;
         public int nDefIndex;
         public int nQuality;
-        public ItemType(int nDefIndex, int nQuality)
+        public int nClass;
+        public string szName;
+        public ItemType(int nTableIndex, int nDefIndex, int nQuality, int nClass, string szName)
         {
+            this.nTableIndex = nTableIndex;
             this.nDefIndex = nDefIndex;
             this.nQuality = nQuality;
+            this.nClass = nClass;
+            this.szName= szName;
         }
     }
 
@@ -37,15 +43,13 @@ namespace SteamBot
         }
 
         /*
-         * Returns a list of string arrays of 2 elements, each containing:
-         * [0]: The item type's ID in the `items' table (i.e. the contents of the item's `index' entry)
-         * [1]: A descriptive, human-readable name (e.g. "Strange Festive Huntsman")
+         * Returns a list of all the item types we want to trade
          * 
          * Returns an empty list if something goes wrong.
          */
-        public List<string[]> getItemNameList()
+        public List<ItemType> getItemTypeList()
         {
-            List<string[]> nameList = new List<string[]>();
+            List<ItemType> nameList = new List<ItemType>();
             SqlCommand getItems = new SqlCommand("SELECT * FROM items", g_itemDatabase);
             SqlDataReader itemReader = getItems.ExecuteReader();
 
@@ -53,9 +57,11 @@ namespace SteamBot
             {
                 while (itemReader.Read())
                 {
-                    string[] nameAndIndex = new string[2];
-                    nameAndIndex[0] = itemReader["index"].ToString();
-                    nameAndIndex[1] = itemReader["name"].ToString();
+                    ItemType nameAndIndex = new ItemType(Convert.ToInt32(itemReader["index"]),
+                                                         Convert.ToInt32(itemReader["defindex"]),
+                                                         Convert.ToInt32(itemReader["quality"]),
+                                                         Convert.ToInt32(itemReader["class"]),
+                                                         itemReader["name"].ToString());
                     nameList.Add(nameAndIndex);
                 }
 
@@ -146,10 +152,10 @@ namespace SteamBot
          */
         public int getItemClass(int itemID)
         {
+            SqlCommand getClassRatio = new SqlCommand("SELECT * FROM items WHERE \"index\" =" + itemID, g_itemDatabase);
+            SqlDataReader classReader = getClassRatio.ExecuteReader();
             try
             {
-                SqlCommand getClassRatio = new SqlCommand("SELECT * FROM items WHERE \"index\" =" + itemID, g_itemDatabase);
-                SqlDataReader classReader = getClassRatio.ExecuteReader();
                 classReader.Read();
                 int itemClass = Convert.ToInt32(classReader["class"]);
                 classReader.Close();
@@ -158,6 +164,7 @@ namespace SteamBot
             catch (Exception e)
             {
                 Console.WriteLine("Error getting Item Class Ratio: " + e.ToString());
+                classReader.Close();
                 return -256;
             }
         }
@@ -203,28 +210,30 @@ namespace SteamBot
          * Returns {nDefIndex, nQuality}.
          * If `nQuality' is -1, all qualities are accepted.
          * 
-         * Return {-256,-256} if something went wrong
+         * Return {-256,-256,-256,-256,""} if something went wrong
          */
-        public int[] getItemAttribs(int itemID)
+        public ItemType getItemAttribs(int itemID)
         {
-            int[] itemAttribs = new int[2];
+            ItemType itemType;
             try
             {
                 SqlCommand getItems = new SqlCommand("SELECT *  FROM items WHERE \"index\" = " + itemID, g_itemDatabase);
                 SqlDataReader itemReader = getItems.ExecuteReader();
                 itemReader.Read();
-                itemAttribs[0] = Convert.ToInt32(itemReader["defindex"]);
-                itemAttribs[1] = Convert.ToInt32(itemReader["quality"]);
+                itemType = new ItemType(itemID, 
+                                        Convert.ToInt32(itemReader["defindex"]),
+                                        Convert.ToInt32(itemReader["quality"]),
+                                        Convert.ToInt32(itemReader["class"]),
+                                        Convert.ToString(itemReader["name"]));
                 itemReader.Close();
-                return itemAttribs;
             }
             catch (Exception e)
             {
                 Console.WriteLine("Error getting Item Attributes: " + e.ToString());
-                itemAttribs[0] = -256;
-                itemAttribs[1] = -256;
-                return itemAttribs;
+                itemType  = new ItemType(-256,-256,-256,-256,"");
             }
+
+            return itemType;
         }
 
         /*
@@ -236,9 +245,8 @@ namespace SteamBot
          * 
          * Returns -256 if somethng went wrong.
          */
-        public double getCurrentItemClassRatio(string steamID, int itemClass)
+        public double getCurrentItemClassRatio(string steamID, int itemClass, List<Inventory.Item>listItems)
         {
-            List<Inventory.Item> listItems = getBackpack(steamID);
             int nTotalItems = listItems.Count();
             int nItemsOfThisClass = 0;
 
@@ -259,9 +267,11 @@ namespace SteamBot
                 // Put each of the item types into a list
                 while (itemReader.Read())
                 {
-                    int nDefIndex = Convert.ToInt32(itemReader["defindex"].ToString());
-                    int nQuality = Convert.ToInt32(itemReader["quality"].ToString());
-                    ItemType itemType = new ItemType(nDefIndex, nQuality);
+                    ItemType itemType = new ItemType(Convert.ToInt32(itemReader["index"]),
+                                                     Convert.ToInt32(itemReader["defindex"]),
+                                                     Convert.ToInt32(itemReader["quality"]),
+                                                     itemClass,
+                                                     itemReader["name"].ToString());
                     itemTypesInClass.Add(itemType);
                 }
 
@@ -324,7 +334,7 @@ namespace SteamBot
          * Return -1.0 if a trade should not be made.
          * Return -256.0 if something went wrong
          */
-        public double computeItemSellingPrice(string steamID, int itemID)
+        public double computeItemSellingPrice(string steamID, int itemID, List<Inventory.Item> listItems)
         {
 
             double nPrice = 1.0;
@@ -350,7 +360,7 @@ namespace SteamBot
                     // Compute the value of the currency [nPrice] is in terms of.
                     // (using the formula found at http://nerdhow.com/tf2-automated-trading/ )
                     double currencyValue = ((dMinPrice + dMaxPrice) / 2.0 + (dMaxPrice - dMinPrice) / 2.0 *
-                                            (getDesiredItemClassRatio(nItemClass) - getCurrentItemClassRatio(steamID, nItemClass)) / getDesiredItemClassRatio(nItemClass));
+                                            (getDesiredItemClassRatio(nItemClass) - getCurrentItemClassRatio(steamID, nItemClass, listItems)) / getDesiredItemClassRatio(nItemClass));
 
                     if (currencyValue > dMaxPrice)
                     {
@@ -382,8 +392,8 @@ namespace SteamBot
                 double dSellingCutoff = Convert.ToDouble(classReader["sellingCutoff"]);
                 classReader.Close();
 
-                double d = (getDesiredItemClassRatio(itemClass) - getCurrentItemClassRatio(steamID, itemClass)) / getDesiredItemClassRatio(itemClass);
-                if ((getDesiredItemClassRatio(itemClass) - getCurrentItemClassRatio(steamID, itemClass)) / getDesiredItemClassRatio(itemClass)
+                double d = (getDesiredItemClassRatio(itemClass) - getCurrentItemClassRatio(steamID, itemClass,listItems)) / getDesiredItemClassRatio(itemClass);
+                if ((getDesiredItemClassRatio(itemClass) - getCurrentItemClassRatio(steamID, itemClass,listItems)) / getDesiredItemClassRatio(itemClass)
                         > dSellingCutoff)
                 {
                     return -1.0;
@@ -404,7 +414,7 @@ namespace SteamBot
          * Return -1.0 if a trade should not be made.
          * Return -256.0 if something went wrong
          */
-        public double computeItemBuyingPrice(string steamID, int itemID)
+        public double computeItemBuyingPrice(string steamID, int itemID, List<Inventory.Item> listItems)
         {
                 double nPrice = 1.0;
 
@@ -429,7 +439,7 @@ namespace SteamBot
                         // Compute the value of the currency [nPrice] is in terms of.
                         // (using the formula found at http://nerdhow.com/tf2-automated-trading/ )
                         double currencyValue = ((dMinPrice + dMaxPrice) / 2.0 + (dMaxPrice - dMinPrice) / 2.0 *
-                                               (getDesiredItemClassRatio(nItemClass) - getCurrentItemClassRatio(steamID, nItemClass)) / getDesiredItemClassRatio(nItemClass));
+                                               (getDesiredItemClassRatio(nItemClass) - getCurrentItemClassRatio(steamID, nItemClass,listItems)) / getDesiredItemClassRatio(nItemClass));
 
                         if (currencyValue < dMinPrice)
                         {
@@ -462,7 +472,7 @@ namespace SteamBot
                     double dBuyingCutoff = Convert.ToDouble(classReader["buyingCutoff"]);
                     classReader.Close();
 
-                if ((getDesiredItemClassRatio(itemClass) - getCurrentItemClassRatio(steamID, itemClass)) / getDesiredItemClassRatio(itemClass)
+                if ((getDesiredItemClassRatio(itemClass) - getCurrentItemClassRatio(steamID, itemClass,listItems)) / getDesiredItemClassRatio(itemClass)
                       < dBuyingCutoff)
                 {
                     return -1.0;
