@@ -8,6 +8,17 @@ using System.Data.SqlClient;
 
 namespace SteamBot
 {
+    public class ItemType
+    {
+        public int nDefIndex;
+        public int nQuality;
+        public ItemType(int nDefIndex, int nQuality)
+        {
+            this.nDefIndex = nDefIndex;
+            this.nQuality = nQuality;
+        }
+    }
+
     /*
      * This class contains a set of functions to compute buying/selling prices of items (including whether or not to buy or sell the items)
      */
@@ -151,6 +162,16 @@ namespace SteamBot
             }
         }
 
+        
+        /*
+         * Given an item defindex and quality, return the item type's class.
+         * reutrns -256 if something goes wrong
+         */
+        int getItemClass(int nDefIndex, int nQuality )
+        {
+            return getItemClass(getItemID(nDefIndex, nQuality));
+        }
+
         /*
          * Given a Defindex and a quality, return the item's ID from the item type database.
          * Return -256 if something goes wrong.
@@ -218,6 +239,10 @@ namespace SteamBot
         public double getCurrentItemClassRatio(string steamID, int itemClass)
         {
             List<Inventory.Item> listItems = getBackpack(steamID);
+            int nTotalItems = listItems.Count();
+            int nItemsOfThisClass = 0;
+
+            List<ItemType> itemTypesInClass = new List<ItemType>();
 
             // Get all the types of items of class [itemClass]
             SqlCommand getItemsOfClass = new SqlCommand("SELECT * FROM items WHERE \"class\" = " + itemClass, g_itemDatabase);
@@ -228,31 +253,35 @@ namespace SteamBot
                 if (listItems.Count() == 0)
                 {
                     // Empty backpack
-                    return -1;
+                    return -256;
                 }
 
-                int nTotalItems = listItems.Count();
-                int nClassItems = 0;
-
-                // For each item type, add how many of it are in [listItems] to our running total, [nClassItems]
+                // Put each of the item types into a list
                 while (itemReader.Read())
                 {
                     int nDefIndex = Convert.ToInt32(itemReader["defindex"].ToString());
                     int nQuality = Convert.ToInt32(itemReader["quality"].ToString());
+                    ItemType itemType = new ItemType(nDefIndex, nQuality);
+                    itemTypesInClass.Add(itemType);
+                }
 
-                    foreach (Inventory.Item i in listItems)
+                itemReader.Close();
+
+                // Check each item in the backpack to see if it matches an item
+                // type in the list, and add 1 to our cumulative total for each
+                // one that does.
+                foreach (Inventory.Item i in listItems)
+                {
+                    foreach (ItemType j in itemTypesInClass)
                     {
-                        if (i.Defindex == itemClass)
+                        if (i.Defindex == j.nDefIndex && i.Quality == j.nQuality.ToString())
                         {
-                            if (Convert.ToInt32(i.Quality) == nQuality)
-                            {
-                                nClassItems++;
-                            }
+                            nItemsOfThisClass++;
                         }
                     }
                 }
-                itemReader.Close();
-                return (double)nClassItems / nTotalItems;
+
+                return (double)nItemsOfThisClass / nTotalItems;
             }
             catch (Exception e)
             {
@@ -327,9 +356,9 @@ namespace SteamBot
                     {
                         currencyValue = dMaxPrice;
                     }
-                    if (currencyValue < dMinPrice + dMarkup)
+                    if (currencyValue < (dMinPrice + dMaxPrice)/2 + dMarkup)
                     {
-                        currencyValue = dMinPrice + dMarkup;
+                        currencyValue = (dMinPrice + dMaxPrice)/2 + dMarkup;
                     }
 
                     // Multiply our price by that value to convert nPrice to now be in terms of another currency.
@@ -406,9 +435,9 @@ namespace SteamBot
                         {
                             currencyValue = dMinPrice;
                         }
-                        if (currencyValue < dMaxPrice - dMarkdown)
+                        if (currencyValue > (dMinPrice + dMaxPrice) / 2 - dMarkdown)
                         {
-                            currencyValue = dMinPrice - dMarkdown;
+                            currencyValue = (dMinPrice + dMaxPrice) / 2 - dMarkdown;
                         }
 
                         // Multiply our price by that value to convert nPrice to now be in terms of another currency.
