@@ -91,6 +91,8 @@ namespace SteamBot
             SqlCommand getNumberOfTypes = new SqlCommand("SELECT COUNT(\"index\") FROM items", g_itemDatabase);
             SqlDataReader itemReader = getNumberOfTypes.ExecuteReader();
 
+            SqlDataReader rdrFindItemInTypeTable;
+
             try
             {
                 // Get backpack
@@ -105,31 +107,33 @@ namespace SteamBot
                 }
 
                 itemReader.Read();
-                int nOfItemTypes = Convert.ToInt32(itemReader[0].ToString());
+                int nOfItemTypes = Convert.ToInt32(itemReader[0]);
                 itemReader.Close();
 
-                SqlCommand getItems = new SqlCommand("SELECT * FROM items", g_itemDatabase);
-                itemReader = getItems.ExecuteReader();
 
-                // For each DB entry, loop through the backpack looking for clean items of this type
-                while (itemReader.Read())
+                foreach (Inventory.Item i in bp.Items)
                 {
-                    int nDefIndex = Convert.ToInt32(itemReader["defindex"].ToString());
-                    int nQuality = Convert.ToInt32(itemReader["quality"].ToString());
-
-                    // Loop through backpack
-                    foreach (Inventory.Item i in bp.Items)
-                    {
-                        if (i.Defindex == nDefIndex)
+                        // Check if it's clean and tradable
+                    if ((null == i.CustomDescription && null == i.CustomName && !(i.IsNotTradeable))) 
+                    {  
+                        SqlCommand cmdFindItemInTypeTable;
+                        // Quality 600 is used for uncraftable items
+                        if( i.IsNotCraftable )
                         {
-                            if (i.Quality == nQuality.ToString() || nQuality == -1)
-                            {
-                                // Finally, check if it's clean.
-                                if (null == i.CustomDescription && null == i.CustomName)
-                                {
-                                    listItems.Add(i);
-                                }
-                            }
+                            cmdFindItemInTypeTable = new SqlCommand("SELECT * FROM \"items\" WHERE defindex = " + i.Defindex + " AND quality = " + 600, g_itemDatabase );
+                        }
+                        else
+                        {
+                            cmdFindItemInTypeTable = new SqlCommand("SELECT * FROM \"items\" WHERE defindex = " + i.Defindex + " AND quality = " + i.Quality, g_itemDatabase );
+                        }
+                          
+                        rdrFindItemInTypeTable = cmdFindItemInTypeTable.ExecuteReader();
+
+                        // Item is in table 
+                        if ( rdrFindItemInTypeTable.HasRows )
+                        {
+                            rdrFindItemInTypeTable.Close();
+                            listItems.Add(i);
                         }
                     }
                 }
@@ -154,9 +158,9 @@ namespace SteamBot
         {
             SqlCommand getClassRatio = new SqlCommand("SELECT * FROM items WHERE \"index\" =" + itemID, g_itemDatabase);
             SqlDataReader classReader = getClassRatio.ExecuteReader();
+            classReader.Read();
             try
             {
-                classReader.Read();
                 int itemClass = Convert.ToInt32(classReader["class"]);
                 classReader.Close();
                 return itemClass;
@@ -171,22 +175,23 @@ namespace SteamBot
 
         
         /*
-         * Given an item defindex and quality, return the item type's class.
+         * Given an item defindex, quality and series, return the item type's class.
          * reutrns -256 if something goes wrong
          */
-        int getItemClass(int nDefIndex, int nQuality )
+        int getItemClass(int nDefIndex, int nQuality)
         {
             return getItemClass(getItemID(nDefIndex, nQuality));
         }
 
         /*
-         * Given a Defindex and a quality, return the item's ID from the item type database.
+         * Given a defindex, quality, and series, return the item's ID from the item type database.
          * Return -256 if something goes wrong.
          */
         public int getItemID(int nDefIndex, int nQuality)
         {
             SqlCommand getItemType = new SqlCommand("SELECT *  FROM items WHERE \"defindex\" = " + nDefIndex +
-                                                      " AND quality = " + nQuality, g_itemDatabase);
+                                                    " AND \"quality\" = " + nQuality,
+                                                    g_itemDatabase);
             SqlDataReader itemTypeReader = getItemType.ExecuteReader();
             try
             {
@@ -220,7 +225,7 @@ namespace SteamBot
                 SqlCommand getItems = new SqlCommand("SELECT *  FROM items WHERE \"index\" = " + itemID, g_itemDatabase);
                 SqlDataReader itemReader = getItems.ExecuteReader();
                 itemReader.Read();
-                itemType = new ItemType(itemID, 
+                itemType = new ItemType(itemID,
                                         Convert.ToInt32(itemReader["defindex"]),
                                         Convert.ToInt32(itemReader["quality"]),
                                         Convert.ToInt32(itemReader["class"]),
@@ -239,9 +244,7 @@ namespace SteamBot
         /*
          * Given some steam ID and an item class (as specified in the database),
          * return the CURRENT ratio of items of [itemClass] to the total number
-         * of backpack items.
-         * 
-         * Only items of types defined in the table are counted
+         * of items in [listItems].
          * 
          * Returns -256 if somethng went wrong.
          */
@@ -284,7 +287,8 @@ namespace SteamBot
                 {
                     foreach (ItemType j in itemTypesInClass)
                     {
-                        if (i.Defindex == j.nDefIndex && i.Quality == j.nQuality.ToString())
+                        if ((i.Defindex == j.nDefIndex || (j.nDefIndex == 600 && i.IsNotCraftable)) &&
+                            i.Quality == j.nQuality.ToString() )
                         {
                             nItemsOfThisClass++;
                         }
@@ -438,8 +442,8 @@ namespace SteamBot
 
                         // Compute the value of the currency [nPrice] is in terms of.
                         // (using the formula found at http://nerdhow.com/tf2-automated-trading/ )
-                        double currencyValue = ((dMinPrice + dMaxPrice) / 2.0 + (dMaxPrice - dMinPrice) / 2.0 *
-                                               (getDesiredItemClassRatio(nItemClass) - getCurrentItemClassRatio(steamID, nItemClass,listItems)) / getDesiredItemClassRatio(nItemClass));
+                        double tendencyScalar = (getDesiredItemClassRatio(nItemClass) - getCurrentItemClassRatio(steamID, nItemClass, listItems)) / getDesiredItemClassRatio(nItemClass);
+                        double currencyValue = ((dMinPrice + dMaxPrice) / 2.0 + (dMaxPrice - dMinPrice) / 2.0 * tendencyScalar);
 
                         if (currencyValue < dMinPrice)
                         {
@@ -471,12 +475,11 @@ namespace SteamBot
                     classReader.Read();
                     double dBuyingCutoff = Convert.ToDouble(classReader["buyingCutoff"]);
                     classReader.Close();
-
-                if ((getDesiredItemClassRatio(itemClass) - getCurrentItemClassRatio(steamID, itemClass,listItems)) / getDesiredItemClassRatio(itemClass)
-                      < dBuyingCutoff)
-                {
-                    return -1.0;
-                }
+                    double tendencyScalar = (getDesiredItemClassRatio(itemClass) - getCurrentItemClassRatio(steamID, itemClass, listItems)) / getDesiredItemClassRatio(itemClass);
+                    if ( tendencyScalar < dBuyingCutoff)
+                    {
+                        return -1.0;
+                    }
 
                 }
                 catch (Exception e)

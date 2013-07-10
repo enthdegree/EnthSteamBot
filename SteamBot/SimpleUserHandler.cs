@@ -39,7 +39,6 @@ namespace SteamBot
 
         public override bool OnTradeRequest() 
         {
-
             return true;
         }
         
@@ -77,7 +76,8 @@ namespace SteamBot
         {
             string s = "You added an item. ";
 
-            int nItemID = botBackpack.getItemID(inventoryItem.Defindex, Convert.ToInt32(inventoryItem.Quality));
+            int nItemID = botBackpack.getItemID(inventoryItem.Defindex, 
+                                                Convert.ToInt32(inventoryItem.Quality));
             
             if (inventoryItem.CustomName != null || inventoryItem.CustomDescription != null)
             {
@@ -89,18 +89,18 @@ namespace SteamBot
                 if (itemValue < 0)
                 {
                     s += "Items of this type are overstocked. \n" +
-                         "Value in your current offer: " + valueCustomerOffered/9 + " ref";
+                         "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N3") + " ref";
                 }
                 else
                 {
                     valueCustomerOffered += itemValue;
-                    s += "Value in your current offer: " + valueCustomerOffered / 9 + " ref";
+                    s += "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N3") + " ref";
                 }
             }
             else
             {
                 s += "The item you just added is not in our trade database. \n" +
-                     "Value in your current offer: " + valueCustomerOffered/9 + " ref";
+                     "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N3") + " ref";
             }
             
             Trade.SendMessage(s);
@@ -108,7 +108,8 @@ namespace SteamBot
         
         public override void OnTradeRemoveItem(Schema.Item schemaItem, Inventory.Item inventoryItem) 
         {
-            int nItemID = botBackpack.getItemID(inventoryItem.Defindex, Convert.ToInt32(inventoryItem.Quality));
+            int nItemID = botBackpack.getItemID(inventoryItem.Defindex,
+                                                Convert.ToInt32(inventoryItem.Quality));
             double nItemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID, listOfBackpackItems);
 
             // Check to see if the item they removed was one that we wanted.
@@ -119,7 +120,7 @@ namespace SteamBot
             }
 
             Trade.SendMessage("You removed an item. \n" +
-                              "Value in your current offer: " + valueCustomerOffered/9 + " ref");
+                              "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N3") + " ref");
         }
         
         public override void OnTradeMessage (string message) {
@@ -134,26 +135,24 @@ namespace SteamBot
                     // If this happens, just report that the item is out of stock.
                     if (botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd, listOfBackpackItems) < 0)
                     {
-                        Trade.SendMessage("Item out of stock. \n--\n" + itemCatalog());
+                        Trade.SendMessage("Item in too low of stock to sell. \n--\n" + itemCatalog());
                     }
                     else
                     {
                         foreach (Inventory.Item i in listOfBackpackItems)
                         {
-                            if (i.Defindex == itemToAddAttribs.nDefIndex)
+                            if ( ((i.Defindex == itemToAddAttribs.nDefIndex) || (i.IsNotCraftable && itemToAddAttribs.nDefIndex == 600)) &&
+                                 (i.Quality == itemToAddAttribs.nQuality.ToString() ) &&
+                                 !(itemsOffered.Contains(i.Id)))
                             {
-                                if ( (i.Quality == itemToAddAttribs.nQuality.ToString() || itemToAddAttribs.nDefIndex == -1)
-                                        && !(itemsOffered.Contains(i.Id)) )
-                                {
-                                    Trade.AddItem(i.Id);
-                                    itemsOffered.Add(i.Id);
-                                    valueBotOffered += botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd, listOfBackpackItems);
-                                    listOfBackpackItems.Remove(i);
-                                    Trade.SendMessage("Value bot is offering: " + valueBotOffered/9 + " ref \n--\n" +
-                                                       mainMenu());
-                                    bItemAddingMode = false;
-                                    return;
-                                }
+                                Trade.AddItem(i.Id);
+                                itemsOffered.Add(i.Id);
+                                valueBotOffered += botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd, listOfBackpackItems);
+                                listOfBackpackItems.Remove(i);
+                                Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 9).ToString("N3") + " ref \n--\n" +
+                                                    mainMenu());
+                                bItemAddingMode = false;
+                                return;
                             }
                         }
 
@@ -210,8 +209,8 @@ namespace SteamBot
         
         public override void OnTradeReady(bool ready) 
         {
-            Trade.SendMessage("Value bot is offering: " + valueBotOffered/9 + " ref \n" +
-                              "Value you are offering: " + valueCustomerOffered/9 );
+            Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 9).ToString("N3") + " ref \n" +
+                              "Value you are offering: " + (valueCustomerOffered / 9).ToString("N3"));
             if (!ready)
             {
                 Trade.SetReady(false);
@@ -252,12 +251,18 @@ namespace SteamBot
             if ((valueBotOffered-valueCustomerOffered)/9 > 0.01)
             {
                 bItemAddingMode = false;
-                Trade.SendMessage("I can't accept this. Please add " + (valueBotOffered - valueCustomerOffered) / 9 + " more ref or ask for less items" +
+                Trade.SendMessage("I can't accept this. Please add " + ((valueBotOffered - valueCustomerOffered) / 9).ToString("N3") + " more ref or ask for less items" +
                     "\n--\n" + mainMenu());
                 return false;
             }
             else
             {
+                if ((valueCustomerOffered - valueBotOffered) / 9 >= 0.3)
+                {
+                    Trade.SendMessage("!!!WARNING!!! This trade will make you lose more than 1 reclaimed metal in value:\n" 
+                        + "The value discrepancy is: " + ((valueCustomerOffered - valueBotOffered) / 9).ToString("N3") + " ref \n" 
+                        + "Are you SURE you want to accept this trade?");
+                }
                 return true;
             }
         }
@@ -272,7 +277,8 @@ namespace SteamBot
                 {
                     foreach(Inventory.Item i in listOfBackpackItems)
                     {
-                        if( i.Defindex == t.nDefIndex && i.Quality == t.nQuality.ToString() )
+                        if(( (i.Defindex == t.nDefIndex) || (i.IsNotCraftable && t.nDefIndex == 600) ) &&
+                           (i.Quality == t.nQuality.ToString() ))
                         {
                             szItemCatalog += "[" + t.nTableIndex + "]: " + t.szName;
                             szItemCatalog += "\n";
