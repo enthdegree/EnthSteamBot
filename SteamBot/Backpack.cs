@@ -34,8 +34,8 @@ namespace SteamBot
 
         public Backpack()
         {
-            g_itemDatabase = new SqlConnection("user id=cdchapma\\Christian;" +
-                                       "password=rUbix222;server=CDCHAPMA;" +
+            g_itemDatabase = new SqlConnection("user id=WIN-B4O8TO98IIG\\Administrator;" +
+                                       "password=lorena_20;server=WIN-B4O8TO98IIG\\SQLEXPRESS;" +
                                        "Trusted_Connection=yes;" +
                                        "database=TF2TradeBot; " +
                                        "connection timeout=300");
