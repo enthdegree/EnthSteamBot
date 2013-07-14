@@ -79,9 +79,9 @@ namespace SteamBot
             int nItemID = botBackpack.getItemID(inventoryItem.Defindex, 
                                                 Convert.ToInt32(inventoryItem.Quality));
             
-            if (inventoryItem.CustomName != null || inventoryItem.CustomDescription != null)
+            if ((inventoryItem.CustomName != null || inventoryItem.CustomDescription != null))
             {
-                s += "The item you added is not clean. \n This bot cannot currently assess the price of unclean items.";
+                s += "The item you added is not clean. \n This bot cannot currently properly assess the price of unclean items.";
             }
             else if (nItemID != -256)
             {
@@ -89,18 +89,18 @@ namespace SteamBot
                 if (itemValue < 0)
                 {
                     s += "Items of this type are overstocked. \n" +
-                         "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N3") + " ref";
+                         "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N2") + " ref";
                 }
                 else
                 {
                     valueCustomerOffered += itemValue;
-                    s += "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N3") + " ref";
+                    s += "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N2") + " ref";
                 }
             }
             else
             {
                 s += "The item you just added is not in our trade database. \n" +
-                     "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N3") + " ref";
+                     "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N2") + " ref";
             }
             
             Trade.SendMessage(s);
@@ -114,13 +114,13 @@ namespace SteamBot
 
             // Check to see if the item they removed was one that we wanted.
             // (Otherwise we end up subtracting (-1) from their offer value)
-            if( nItemValue >= 0)
+            if(nItemValue >= 0)
             {
                 valueCustomerOffered -= nItemValue;
             }
 
             Trade.SendMessage("You removed an item. \n" +
-                              "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N3") + " ref");
+                              "Value in your current offer: " + (valueCustomerOffered / 9).ToString("N2") + " ref");
         }
         
         public override void OnTradeMessage (string message) {
@@ -135,7 +135,7 @@ namespace SteamBot
                     // If this happens, just report that the item is out of stock.
                     if (botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd, listOfBackpackItems) < 0)
                     {
-                        Trade.SendMessage("Item in too low of stock to sell. \n--\n" + itemCatalog());
+                        Trade.SendMessage(itemCatalog() + "\n--\n Item in too low of stock to sell." );
                     }
                     else
                     {
@@ -149,7 +149,7 @@ namespace SteamBot
                                 itemsOffered.Add(i.Id);
                                 valueBotOffered += botBackpack.computeItemSellingPrice("76561198070842975", nIdToAdd, listOfBackpackItems);
                                 listOfBackpackItems.Remove(i);
-                                Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 9).ToString("N3") + " ref \n--\n" +
+                                Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 9).ToString("N2") + " ref \n--\n" +
                                                     mainMenu());
                                 bItemAddingMode = false;
                                 return;
@@ -158,7 +158,7 @@ namespace SteamBot
 
                         // If we loop through the entire backpack without finding an item of this type, 
                         // report that to the user.
-                        Trade.SendMessage("Item out of stock. \n--\n" + itemCatalog());
+                        Trade.SendMessage(itemCatalog() + "\n--\n Item out of stock.");
                     }
                 }
                 catch (Exception e)
@@ -172,7 +172,7 @@ namespace SteamBot
                     }
                     else
                     {
-                        Trade.SendMessage("Response could not be parsed.\n--\n" + itemCatalog() );
+                        Trade.SendMessage(itemCatalog() + "\n--\n Response could not be parsed.");
                     }
                 }
             }
@@ -209,8 +209,8 @@ namespace SteamBot
         
         public override void OnTradeReady(bool ready) 
         {
-            Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 9).ToString("N3") + " ref \n" +
-                              "Value you are offering: " + (valueCustomerOffered / 9).ToString("N3"));
+            Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 9).ToString("N2") + " ref \n" +
+                              "Value you are offering: " + (valueCustomerOffered / 9).ToString("N2"));
             if (!ready)
             {
                 Trade.SetReady(false);
@@ -251,7 +251,7 @@ namespace SteamBot
             if ((valueBotOffered-valueCustomerOffered)/9 > 0.01)
             {
                 bItemAddingMode = false;
-                Trade.SendMessage("I can't accept this. Please add " + ((valueBotOffered - valueCustomerOffered) / 9).ToString("N3") + " more ref or ask for less items" +
+                Trade.SendMessage("I can't accept this. Please add " + ((valueBotOffered - valueCustomerOffered) / 9).ToString("N2") + " more ref or ask for less items" +
                     "\n--\n" + mainMenu());
                 return false;
             }
@@ -260,7 +260,7 @@ namespace SteamBot
                 if ((valueCustomerOffered - valueBotOffered) / 9 >= 0.3)
                 {
                     Trade.SendMessage("!!!WARNING!!! This trade will make you lose more than 1 reclaimed metal in value:\n" 
-                        + "The value discrepancy is: " + ((valueCustomerOffered - valueBotOffered) / 9).ToString("N3") + " ref \n" 
+                        + "The value discrepancy is: " + ((valueCustomerOffered - valueBotOffered) / 9).ToString("N2") + " ref \n" 
                         + "Are you SURE you want to accept this trade?");
                 }
                 return true;
@@ -280,6 +280,11 @@ namespace SteamBot
                         if(( (i.Defindex == t.nDefIndex) || (i.IsNotCraftable && t.nDefIndex == 600) ) &&
                            (i.Quality == t.nQuality.ToString() ))
                         {
+                            // Check if we're selling it
+                            if (botBackpack.computeItemSellingPrice("76561198070842975", t.nTableIndex, listOfBackpackItems) < 0)
+                            {
+                                break;
+                            }
                             szItemCatalog += "[" + t.nTableIndex + "]: " + t.szName;
                             szItemCatalog += "\n";
                             break;
@@ -308,6 +313,9 @@ namespace SteamBot
             bItemAddingMode = false;
             bCatalogIsUpToDate = false;
             szItemCatalog = "";
+
+            Log.Warn("Trade closed.");
+            Bot.CloseTrade();
         }
 
     }
