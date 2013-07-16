@@ -69,11 +69,12 @@ namespace SteamBot
         
         public override void OnTradeInit()
         {
-
             valueCustomerOffered = 0;
             valueBotOffered = 0;
             itemsOffered.Clear();
-            listOfBackpackItems = botBackpack.getBackpack("76561198070842975");
+
+            Bot.GetInventory();
+            listOfBackpackItems = new List<Inventory.Item>(Bot.MyInventory.Items); 
 
             bItemAddingMode = false;
             bCatalogIsUpToDate = false;
@@ -204,7 +205,7 @@ namespace SteamBot
                             Trade.RemoveItem(id);
                         }
                         itemsOffered.Clear();
-                        listOfBackpackItems = botBackpack.getBackpack("76561198070842975");
+                        listOfBackpackItems = new List<Inventory.Item>(Bot.MyInventory.Items); 
                         valueBotOffered = 0;
                         Trade.SendMessage(mainMenu());
                         break;
