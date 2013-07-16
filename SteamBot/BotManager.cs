@@ -57,7 +57,10 @@ namespace SteamBot
             for (int i = 0; i < ConfigObject.Bots.Length; i++)
             {
                 Configuration.BotInfo info = ConfigObject.Bots[i];
-                mainLog.Info("Launching Bot " + info.DisplayName + "...");
+                if (ConfigObject.AutoStartAllBots || info.AutoStart)
+                {
+                    mainLog.Info("Launching Bot " + info.DisplayName + "...");
+                }
 
                 var v = new RunningBot(useSeparateProcesses, i, ConfigObject);
                 botProcs.Add(v);
@@ -162,6 +165,28 @@ namespace SteamBot
         }
 
         /// <summary>
+        /// Sets the SteamGuard auth code on the given bot
+        /// </summary>
+        /// <param name="index">The bot's index</param>
+        /// <param name="AuthCode">The auth code</param>
+        public void AuthBot(int index, string AuthCode)
+        {
+            if (index < botProcs.Count)
+            {
+                if (!botProcs[index].UsingProcesses)
+                    botProcs[index].TheBot.AuthCode = AuthCode;
+                else
+                {
+                    //  Write out auth code to the bot process' stdin
+                    StreamWriter BotStdIn = botProcs[index].BotProcess.StandardInput;
+
+                    BotStdIn.WriteLine(AuthCode);
+                    BotStdIn.Flush();
+                }
+            }
+        }
+
+        /// <summary>
         /// A method to return an instance of the <c>bot.BotControlClass</c>.
         /// </summary>
         /// <param name="bot">The bot.</param>
@@ -218,17 +243,22 @@ namespace SteamBot
             // will not be null in threaded mode. will be null in process mode.
             public Bot TheBot { get; set; }
 
+            public bool IsRunning = false;
+
             public void Stop()
             {
-                if (UsingProcesses)
+                if (IsRunning && UsingProcesses)
                 {
                     if (!BotProcess.HasExited)
+                    {
                         BotProcess.Kill();
+                        IsRunning = false;
+                    }
                 }
-                else
+                else if (TheBot != null && TheBot.IsRunning)
                 {
-                    if (TheBot != null)
-                        TheBot.StopBot();
+                    TheBot.StopBot();
+                    IsRunning = false;
                 }
             }
 
@@ -236,12 +266,22 @@ namespace SteamBot
             {
                 if (UsingProcesses)
                 {
-                    SpawnSteamBotProcess(BotConfigIndex);
+                    if (!IsRunning)
+                    {
+                        SpawnSteamBotProcess(BotConfigIndex);
+                        IsRunning = true;
+                    }
                 }
-                else
+                else if (TheBot == null)
                 {
                     SpawnBotThread(BotConfig);
-                }  
+                    IsRunning = true;
+                }
+                else if (!TheBot.IsRunning)
+                {
+                    SpawnBotThread(BotConfig);
+                    IsRunning = true;
+                }
             }
 
             private void SpawnSteamBotProcess(int botIndex)
@@ -254,11 +294,14 @@ namespace SteamBot
                 botProc.StartInfo.Arguments = @"-bot " + botIndex;
 
                 // Set UseShellExecute to false for redirection.
-                botProc.StartInfo.UseShellExecute = true;
+                botProc.StartInfo.UseShellExecute = false;
 
                 // Redirect the standard output.  
                 // This stream is read asynchronously using an event handler.
                 botProc.StartInfo.RedirectStandardOutput = false;
+
+                // Redirect standard input to allow manager commands to be read properly
+                botProc.StartInfo.RedirectStandardInput = true;
 
                 // Set our event handler to asynchronously read the output.
                 //botProc.OutputDataReceived += new DataReceivedEventHandler(BotStdOutHandler);
@@ -280,22 +323,8 @@ namespace SteamBot
                                 UserHandlerCreator,
                                 true);
 
-                b.OnSteamGuardRequired += BotOnOnSteamGuardRequired;
-
                 TheBot = b;
                 TheBot.StartBot();
-            }
-
-            private void BotOnOnSteamGuardRequired(object sender, SteamGuardRequiredEventArgs barf)
-            {
-                var bot = sender as Bot;
-                var window = new SteamGuardForm(bot.DisplayName);
-                var dialogResult = window.ShowDialog();
-
-                if (dialogResult == DialogResult.OK)
-                {
-                    barf.SteamGuard = window.UserEnteredCode;
-                }
             }
 
             //private static void BotStdOutHandler(object sender, DataReceivedEventArgs e)

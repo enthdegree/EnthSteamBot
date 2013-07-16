@@ -28,7 +28,17 @@ namespace SteamBot
         {
             return true;
         }
-        
+
+        public override void OnLoginCompleted()
+        {
+        }
+
+        public override void OnChatRoomMessage(SteamID chatID, SteamID sender, string message)
+        {
+            Log.Info(Bot.SteamFriends.GetFriendPersonaName(sender) + ": " + message);
+            base.OnChatRoomMessage(chatID, sender, message);
+        }
+
         public override void OnFriendRemove () {}
         
         public override void OnMessage (string message, EChatEntryType type)
@@ -209,8 +219,14 @@ namespace SteamBot
         
         public override void OnTradeReady(bool ready) 
         {
+
             Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 9).ToString("N2") + " ref \n" +
                               "Value you are offering: " + (valueCustomerOffered / 9).ToString("N2"));
+
+            //Because SetReady must use its own version, it's important
+            //we poll the trade to make sure everything is up-to-date.
+            Trade.Poll();
+
             if (!ready)
             {
                 Trade.SetReady(false);
@@ -224,27 +240,31 @@ namespace SteamBot
                 }
             }
         }
-        
-        public override void OnTradeAccept() 
+
+        public override void OnTradeAccept()
         {
             if (Validate() || IsAdmin)
             {
-                bool success = Trade.AcceptTrade();
+                bool success = false;
 
-                if (success)
+                //Even if it is successful, AcceptTrade can fail on
+                //trades with a lot of items so we use a try-catch
+                try
                 {
-                    Log.Success("Trade successful!");
-                    bCatalogIsUpToDate = false;
+                    success = Trade.AcceptTrade();
+                    Log.Success("Trade Complete!");
                 }
-                else
+                catch (Exception e)
                 {
-                    Log.Warn("Trade may have failed.");
-                    bCatalogIsUpToDate = false;
+                    Log.Warn("Possible failure at trade accept: " + e.ToString());
                 }
+                
+                bCatalogIsUpToDate = false;
             }
 
             OnTradeClose();
         }
+
 
         public bool Validate()
         {

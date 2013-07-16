@@ -1,6 +1,7 @@
 ﻿using System;
 using SteamKit2;
 using SteamTrade;
+using System.Collections.Generic;
 
 namespace SteamBot
 {
@@ -15,15 +16,24 @@ namespace SteamBot
         private const string AddCratesSubCmd = "crates";
         private const string AddWepsSubCmd = "weapons";
         private const string AddMetalSubCmd = "metal";
-        private const string AllSubCmd = "all";
+        private const string AddAllSubCmd = "all";
         private const string HelpCmd = "help";
 
         public AdminUserHandler(Bot bot, SteamID sid)
             : base(bot, sid)
         {
+            Bot.GetInventory();
+            Bot.GetOtherInventory(OtherSID);
         }
 
         #region Overrides of UserHandler
+
+        /// <summary>
+        /// Called when the bot is fully logged in.
+        /// </summary>
+        public override void OnLoginCompleted()
+        {
+        }
 
         /// <summary>
         /// Called when a the user adds the bot as a friend.
@@ -140,16 +150,23 @@ namespace SteamBot
             }
 
             if (message.StartsWith(AddCmd))
+            {
                 HandleAddCommand(message);
+                Trade.SendMessage("done adding.");
+            }
             else if (message.StartsWith(RemoveCmd))
+            {
                 HandleRemoveCommand(message);
+                Trade.SendMessage("done removing.");
+            }
         }
 
         private void PrintHelpMessage()
         {
-            Trade.SendMessage(String.Format("{0} {1} - adds all crates", AddCmd, AddCratesSubCmd));
-            Trade.SendMessage(String.Format("{0} {1} - adds all metal", AddCmd, AddMetalSubCmd));
-            Trade.SendMessage(String.Format("{0} {1} - adds all weapons", AddCmd, AddWepsSubCmd));
+            Trade.SendMessage(String.Format("{0} {1} [amount] [series] - adds all crates (optionally by series number, use 0 for amount to add all)", AddCmd, AddCratesSubCmd));
+            Trade.SendMessage(String.Format("{0} {1} [amount] - adds metal", AddCmd, AddMetalSubCmd));
+            Trade.SendMessage(String.Format("{0} {1} [amount] - adds weapons", AddCmd, AddWepsSubCmd));
+            Trade.SendMessage(String.Format("{0} {1} [amount] - adds items", AddCmd, AddAllSubCmd));
             Trade.SendMessage(String.Format(@"{0} <craft_material_type> [amount] - adds all or a given amount of items of a given crafing type.", AddCmd));
             Trade.SendMessage(String.Format(@"{0} <defindex> [amount] - adds all or a given amount of items of a given defindex.", AddCmd));
 
@@ -185,7 +202,14 @@ namespace SteamBot
                     AddItemsByCraftType("weapon", amount);
                     break;
                 case AddCratesSubCmd:
-                    AddItemsByCraftType("supply_crate", amount);
+                    // data[3] is the optional series number
+                    if (!String.IsNullOrEmpty(data[3]))
+                        AddCrateBySeries(data[3], amount);
+                    else
+                        AddItemsByCraftType("supply_crate", amount);
+                    break;
+                case AddAllSubCmd:
+                    AddAllItems();
                     break;
                 default:
                     AddItemsByCraftType(typeToAdd, amount);
@@ -202,6 +226,9 @@ namespace SteamBot
             string subCommand;
 
             bool subCmdOk = GetSubCommand(data, out subCommand);
+
+            // were dumb right now... just remove everything.
+            Trade.RemoveAllItems();
 
             if (!subCmdOk)
                 return;
@@ -225,18 +252,73 @@ namespace SteamBot
             }
         }
 
+        private void AddAllItems()
+        {
+            var items = Trade.CurrentSchema.GetItems();
+
+            foreach (var item in items)
+            {
+                Trade.AddAllItemsByDefindex(item.Defindex, 0);
+            }
+        }
+
+        private void AddCrateBySeries(string series, uint amount)
+        {
+            int ser;
+            bool parsed = int.TryParse(series, out ser);
+
+            if (!parsed)
+                return;
+
+            var l = Trade.CurrentSchema.GetItemsByCraftingMaterial("supply_crate");
+
+
+            List<Inventory.Item> invItems = new List<Inventory.Item>();
+
+            foreach (var schemaItem in l)
+            {
+                ushort defindex = schemaItem.Defindex;
+                invItems.AddRange(Bot.MyInventory.GetItemsByDefindex(defindex));
+            }
+
+            uint added = 0;
+
+            foreach (var item in invItems)
+            {
+                int crateNum = 0;
+                for (int count = 0; count < item.Attributes.Length; count++)
+                {
+                    // FloatValue will give you the crate's series number
+                    crateNum = (int) item.Attributes[count].FloatValue;
+
+                    if (crateNum == ser)
+                    {
+                        bool ok = Trade.AddItem(item.Id);
+
+                        if (ok)
+                            added++;
+
+                        // if bulk adding something that has a lot of unique
+                        // defindex (weapons) we may over add so limit here also
+                        if (amount > 0 && added >= amount)
+                            return;
+                    }
+                }
+            }
+        }
+
         bool GetSubCommand (string[] data, out string subCommand)
         {
             if (data.Length < 2)
             {
-                Trade.SendMessage ("No parameter for cmd: " + AddCmd);
+                Trade.SendMessage ("No parameter for cmd");
                 subCommand = null;
                 return false;
             }
 
             if (String.IsNullOrEmpty (data [1]))
             {
-                Trade.SendMessage ("No parameter for cmd: " + AddCmd);
+                Trade.SendMessage ("No parameter for cmd");
                 subCommand = null;
                 return false;
             }

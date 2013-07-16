@@ -50,6 +50,9 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Backpack.cs" />
+    <Compile Include="TF2GC\Crafting.cs" />
+    <Compile Include="TF2GC\Items.cs" />
+    <Compile Include="TF2GC\MsgCraft.cs" />
     <Compile Include="SteamGuardRequiredEventArgs.cs" />
     <Compile Include="Bot.cs" />
     <Compile Include="AssemblyInfo.cs" />
@@ -60,17 +63,16 @@
     <Compile Include="Log.cs" />
     <Compile Include="3rdparty\Options.cs" />
     <Compile Include="Program.cs" />
-    <Compile Include="SteamGuardForm.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="SteamGuardForm.Designer.cs">
-      <DependentUpon>SteamGuardForm.cs</DependentUpon>
-    </Compile>
+    <Compile Include="TF2GC\MsgDelete.cs" />
     <Compile Include="UserHandler.cs" />
     <Compile Include="SimpleUserHandler.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
+    <ProjectReference Include="..\Lib\protobuf-net\protobuf-net\protobuf-net.csproj">
+      <Project>{8374E4D7-2A91-48F1-9360-09B09CF27C3F}</Project>
+      <Name>protobuf-net</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Lib\SteamKit2\SteamKit2\SteamKit2.csproj">
       <Project>{BEB5BF07-BB56-402A-97A3-A41C6444C6A5}</Project>
       <Name>SteamKit2</Name>
@@ -83,10 +85,5 @@
       <Project>{6CEC0333-81EB-40EE-85D1-941363626FC7}</Project>
       <Name>SteamTrade</Name>
     </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
-    <EmbeddedResource Include="SteamGuardForm.resx">
-      <DependentUpon>SteamGuardForm.cs</DependentUpon>
-    </EmbeddedResource>
   </ItemGroup>
 </Project>
