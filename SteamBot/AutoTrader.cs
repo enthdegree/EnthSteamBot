@@ -6,7 +6,7 @@ using System;
 
 namespace SteamBot
 {
-    public class SimpleUserHandler : UserHandler
+    public class AutoTrader : UserHandler
     {
         public double valueCustomerOffered = 0;
         public double valueBotOffered = 0;
@@ -19,7 +19,7 @@ namespace SteamBot
         bool bCatalogIsUpToDate = false;
         string szItemCatalog = "";
 
-        public SimpleUserHandler (Bot bot, SteamID sid) : base(bot, sid) 
+        public AutoTrader (Bot bot, SteamID sid) : base(bot, sid) 
         {
             botBackpack = new Backpack();
         }
