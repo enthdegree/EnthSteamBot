@@ -1,3 +1,5 @@
+#define DEBUG_TRADE_MANAGER
+
 using System;
 using System.Diagnostics;
 using System.Threading;
