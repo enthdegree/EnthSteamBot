@@ -315,11 +315,12 @@ namespace SteamBot
                            !(i.IsNotTradeable) ) 
                         {
                             // Check if we're selling it
-                            if (botBackpack.computeItemSellingPrice("76561198070842975", t.nTableIndex, listOfBackpackItems) < 0)
+                            double dPrice = botBackpack.computeItemSellingPrice("76561198070842975", t.nTableIndex, listOfBackpackItems);
+                            if ( dPrice < 0)
                             {
                                 break;
                             }
-                            szItemCatalog += "[" + t.nTableIndex + "]: " + t.szName;
+                            szItemCatalog += "[" + t.nTableIndex + "]: " + t.szName + " (" + (dPrice/9).ToString("N2") + " ref)";
                             szItemCatalog += "\n";
                             break;
                         }
