@@ -440,10 +440,6 @@ namespace SteamTrade
 
             if (status == null)
                 throw new TradeException("The web command to get the trade status failed.");
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/development
             switch (status.trade_status)
             {
                 // Nothing happened. i.e. trade hasn't closed yet.
@@ -458,13 +454,9 @@ namespace SteamTrade
                 // All other known values (3, 4) correspond to trades closing.
                 default:
                     if (OnError != null)
-<<<<<<< HEAD
-                        OnError("Trade was closed by customer. Trade status: " + status.trade_status);
-=======
                     {
                         OnError("Trade was closed by customer. Trade status: " + status.trade_status);
                     }
->>>>>>> origin/development
                     OtherUserCancelled = true;
                     return otherDidSomething;
             }

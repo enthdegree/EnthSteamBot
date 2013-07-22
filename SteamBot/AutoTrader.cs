@@ -127,7 +127,8 @@ namespace SteamBot
         {
             if (null == inventoryItem)
             {
-                Trade.SendMessage("You added an item. \nCould not find item in database.");
+                Trade.SendMessage("You removed an item.");
+                return;
             }
 
             int nItemID = botBackpack.getItemID(inventoryItem.Defindex,
