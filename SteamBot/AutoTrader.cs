@@ -311,7 +311,8 @@ namespace SteamBot
                     foreach(Inventory.Item i in listOfBackpackItems)
                     {
                         if(( (i.Defindex == t.nDefIndex) || (i.IsNotCraftable && t.nDefIndex == 600) ) &&
-                           (i.Quality == t.nQuality.ToString() ))
+                           (i.Quality == t.nQuality.ToString() ) &&
+                           !(i.IsNotTradeable) ) 
                         {
                             // Check if we're selling it
                             if (botBackpack.computeItemSellingPrice("76561198070842975", t.nTableIndex, listOfBackpackItems) < 0)
