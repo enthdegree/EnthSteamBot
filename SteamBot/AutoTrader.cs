@@ -85,6 +85,12 @@ namespace SteamBot
         
         public override void OnTradeAddItem(Schema.Item schemaItem, Inventory.Item inventoryItem)
         {
+            if (null == inventoryItem)
+            {
+                Trade.SendMessage("You added an item. \nCould not find item in database.");
+                return;
+            }
+
             string s = "You added an item. ";
 
             int nItemID = botBackpack.getItemID(inventoryItem.Defindex, 
@@ -119,6 +125,11 @@ namespace SteamBot
         
         public override void OnTradeRemoveItem(Schema.Item schemaItem, Inventory.Item inventoryItem) 
         {
+            if (null == inventoryItem)
+            {
+                Trade.SendMessage("You added an item. \nCould not find item in database.");
+            }
+
             int nItemID = botBackpack.getItemID(inventoryItem.Defindex,
                                                 Convert.ToInt32(inventoryItem.Quality));
             double nItemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID, listOfBackpackItems);
