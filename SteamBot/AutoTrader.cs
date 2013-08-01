@@ -96,9 +96,9 @@ namespace SteamBot
             int nItemID = botBackpack.getItemID(inventoryItem.Defindex, 
                                                 Convert.ToInt32(inventoryItem.Quality));
             
-            if ((inventoryItem.CustomName != null || inventoryItem.CustomDescription != null))
+            if ((inventoryItem.CustomName != null || inventoryItem.CustomDescription != null ))
             {
-                s += "The item you added is not clean. \n This bot cannot currently properly assess the price of unclean items.";
+                s += "The item you added is not clean. \n This bot cannot currently properly assess the price of these items.";
             }
             else if (nItemID != -256)
             {
@@ -281,7 +281,7 @@ namespace SteamBot
 
         public bool Validate()
         {
-            if ((valueBotOffered-valueCustomerOffered)/9 > 0.01)
+            if ((valueBotOffered-valueCustomerOffered)/9 > 0.015)
             {
                 bItemAddingMode = false;
                 Trade.SendMessage("I can't accept this. Please add " + ((valueBotOffered - valueCustomerOffered) / 9).ToString("N2") + " more ref or ask for less items" +
