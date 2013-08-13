@@ -84,23 +84,31 @@ namespace SteamBot
         }
         
         public override void OnTradeAddItem(Schema.Item schemaItem, Inventory.Item inventoryItem)
-        {
+            {
+            string s = "You added an item. ";
+
             if (null == inventoryItem)
             {
                 Trade.SendMessage("You added an item. \nCould not find item in database.");
                 return;
             }
-
-            string s = "You added an item. ";
-
-            int nItemID = botBackpack.getItemID(inventoryItem.Defindex, 
-                                                Convert.ToInt32(inventoryItem.Quality));
-            
-            if ((inventoryItem.CustomName != null || inventoryItem.CustomDescription != null ))
+           if ((inventoryItem.CustomName != null || inventoryItem.CustomDescription != null ))
             {
                 s += "The item you added is not clean. \n This bot cannot currently properly assess the price of these items.";
             }
-            else if (nItemID != -256)
+
+            int nItemID = -256;
+            if (inventoryItem.IsNotCraftable)
+            {
+                nItemID = botBackpack.getItemID(inventoryItem.Defindex, 600);
+            }
+            else
+            {
+                nItemID = botBackpack.getItemID(inventoryItem.Defindex,
+                                                Convert.ToInt32(inventoryItem.Quality));
+            }
+
+            if (nItemID != -256)
             {
                 double itemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID, listOfBackpackItems);
                 if (itemValue < 0)
@@ -131,8 +139,17 @@ namespace SteamBot
                 return;
             }
 
-            int nItemID = botBackpack.getItemID(inventoryItem.Defindex,
+            int nItemID = -256;
+            if (inventoryItem.IsNotCraftable)
+            {
+                nItemID = botBackpack.getItemID(inventoryItem.Defindex, 600);
+            }
+            else
+            {
+                nItemID = botBackpack.getItemID(inventoryItem.Defindex,
                                                 Convert.ToInt32(inventoryItem.Quality));
+            }
+
             double nItemValue = botBackpack.computeItemBuyingPrice("76561198070842975", nItemID, listOfBackpackItems);
 
             // Check to see if the item they removed was one that we wanted.
@@ -164,9 +181,12 @@ namespace SteamBot
                     {
                         foreach (Inventory.Item i in listOfBackpackItems)
                         {
-                            if ( ((i.Defindex == itemToAddAttribs.nDefIndex) || (i.IsNotCraftable && itemToAddAttribs.nDefIndex == 600)) &&
-                                 (i.Quality == itemToAddAttribs.nQuality.ToString() ) &&
-                                 !(itemsOffered.Contains(i.Id)))
+                            if ( !(itemsOffered.Contains(i.Id)) && 
+                                 !(i.IsNotTradeable) &&
+                                 i.Defindex == itemToAddAttribs.nDefIndex &&
+                                 ( (!(i.IsNotCraftable) && i.Quality == itemToAddAttribs.nQuality.ToString()) ||
+                                   (i.IsNotCraftable && itemToAddAttribs.nQuality == 600) ) 
+                                )
                             {
                                 Trade.AddItem(i.Id);
                                 itemsOffered.Add(i.Id);
@@ -175,6 +195,7 @@ namespace SteamBot
                                 Trade.SendMessage("Value bot is offering: " + (valueBotOffered / 9).ToString("N2") + " ref \n--\n" +
                                                     mainMenu());
                                 bItemAddingMode = false;
+                                bCatalogIsUpToDate = false;
                                 return;
                             }
                         }
@@ -310,9 +331,11 @@ namespace SteamBot
                 {
                     foreach(Inventory.Item i in listOfBackpackItems)
                     {
-                        if(( (i.Defindex == t.nDefIndex) || (i.IsNotCraftable && t.nDefIndex == 600) ) &&
-                           (i.Quality == t.nQuality.ToString() ) &&
-                           !(i.IsNotTradeable) ) 
+                        if(i.Defindex == t.nDefIndex &&
+                           ( ( !(i.IsNotCraftable) && (i.Quality == t.nQuality.ToString()) ) ||
+                             ( i.IsNotCraftable && 600 == t.nQuality ) ) &&
+                           !(i.IsNotTradeable) && 
+                           !(itemsOffered.Contains(i.Id)))
                         {
                             // Check if we're selling it
                             double dPrice = botBackpack.computeItemSellingPrice("76561198070842975", t.nTableIndex, listOfBackpackItems);
